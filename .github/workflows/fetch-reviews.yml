@@ -1,0 +1,16 @@
+name: Fetch GMB Reviews
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Cada 5 minutos
+  workflow_dispatch:         # También manual desde GitHub UI
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger review fetch
+        run: |
+          curl -f -X GET "${{ secrets.APP_URL }}/api/cron/fetch-reviews" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --max-time 30
