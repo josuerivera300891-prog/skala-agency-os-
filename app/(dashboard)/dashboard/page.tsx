@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import type { Client, Lead, Review } from '@/types'
+import type { Client } from '@/types'
 
 const SUPABASE_CONFIGURED = !!(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -22,26 +22,41 @@ export default async function AgencyDashboard() {
         .single()
 
       if (profile?.agency_id) {
-        const results = await Promise.all([
-          // Filtrar clientes por agency_id
-          supabase.from('clients').select('*').eq('agency_id', profile.agency_id).eq('active', true),
-          // Filtrar leads por pertenencia a clientes de la agencia
-          supabase.from('leads').select('id, created_at, client_id')
-            .in('client_id', supabase.from('clients').select('id').eq('agency_id', profile.agency_id))
-            .gte('created_at', new Date(Date.now() - 30 * 86400_000).toISOString()),
-          // Filtrar reviews por pertenencia a clientes de la agencia
-          supabase.from('reviews').select('id, created_at, client_id')
-            .in('client_id', supabase.from('clients').select('id').eq('agency_id', profile.agency_id))
-            .gte('created_at', new Date(Date.now() - 7 * 86400_000).toISOString()),
-          // Filtrar workflows por pertenencia a clientes de la agencia
-          supabase.from('workflows').select('*')
-            .in('client_id', supabase.from('clients').select('id').eq('agency_id', profile.agency_id))
-            .eq('active', true),
-        ])
-        clients   = results[0].data
-        leads     = results[1].data
-        reviews   = results[2].data
-        workflows = results[3].data
+        // Primero obtener IDs de clientes de la agencia
+        const { data: agencyClients } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('agency_id', profile.agency_id)
+          .eq('active', true)
+
+        const clientIds = (agencyClients ?? []).map((c: { id: string }) => c.id)
+
+        // Obtener clientes completos y datos filtrados por clientIds
+        const { data: clientsFull } = await supabase
+          .from('clients')
+          .select('*')
+          .eq('agency_id', profile.agency_id)
+          .eq('active', true)
+
+        clients = clientsFull
+
+        if (clientIds.length > 0) {
+          const now = Date.now()
+          const [leadsRes, reviewsRes, workflowsRes] = await Promise.all([
+            supabase.from('leads').select('id, created_at, client_id')
+              .in('client_id', clientIds)
+              .gte('created_at', new Date(now - 30 * 86400_000).toISOString()),
+            supabase.from('reviews').select('id, created_at, client_id')
+              .in('client_id', clientIds)
+              .gte('created_at', new Date(now - 7 * 86400_000).toISOString()),
+            supabase.from('workflows').select('*')
+              .in('client_id', clientIds)
+              .eq('active', true),
+          ])
+          leads     = leadsRes.data
+          reviews   = reviewsRes.data
+          workflows = workflowsRes.data
+        }
       }
     }
   }
