@@ -2,7 +2,11 @@ import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '@/lib/logger'
 import type { WhatsAppReplyResult, ClientConfig } from '@/types'
 
-const client = new Anthropic()
+let _client: Anthropic | null = null
+function getClient(): Anthropic {
+  if (!_client) _client = new Anthropic()
+  return _client
+}
 
 interface WhatsAppBotParams {
   message:    string
@@ -31,7 +35,7 @@ Reglas:
 Responde SOLO con JSON válido (sin markdown, sin backticks):
 {"text":"respuesta aquí","intent":"appointment|inquiry|complaint|other","detectedService":"servicio si aplica o null"}`
 
-  const response = await client.messages.create({
+  const response = await getClient().messages.create({
     model:      'claude-sonnet-4-6',
     max_tokens: 400,
     system:     systemPrompt,

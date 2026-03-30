@@ -1,7 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { logger } from '@/lib/logger'
 
-const client = new Anthropic()
+let _client: Anthropic | null = null
+function getClient(): Anthropic {
+  if (!_client) _client = new Anthropic()
+  return _client
+}
 
 interface ReviewReplyParams {
   reviewText: string
@@ -31,7 +35,7 @@ Genera una respuesta EMPÁTICA en español para esta reseña negativa de ${revie
 - Máximo 3 oraciones
 Solo devuelve el texto de la respuesta.`
 
-  const message = await client.messages.create({
+  const message = await getClient().messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 300,
     messages: [{ role: 'user', content: prompt }],

@@ -1,7 +1,13 @@
 import { Resend } from 'resend'
 import { logger } from '@/lib/logger'
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
+let _resend: Resend | null = null
+function getResend(): Resend {
+  if (!_resend) {
+    _resend = new Resend(process.env.RESEND_API_KEY!)
+  }
+  return _resend
+}
 const FROM = process.env.RESEND_FROM_EMAIL ?? 'noreply@skalamarketing.com'
 
 type EmailTemplate = 'lead_welcome' | 'nurture_day_2' | 'nurture_day_3' | 'nurture_day_7' | 'weekly_report'
@@ -85,7 +91,7 @@ export async function sendEmail({
   const { subject, html } = buildSubjectAndBody(template, data)
 
   try {
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from:    FROM,
       to,
       subject,
