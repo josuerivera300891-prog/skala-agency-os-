@@ -1,103 +1,147 @@
-const CATEGORIES = [
-  { name: 'Foundational Setup', icon: '🔧', active: true },
-  { name: 'Marketing & Lead Generation', icon: '📣', active: false },
-  { name: 'Sales & Conversations', icon: '💬', active: false },
-  { name: 'Website & Monetisation', icon: '🌐', active: false },
-  { name: 'Ecommerce', icon: '🛒', active: false },
-]
+import { createClient } from '@/lib/supabase/server'
+import Link from 'next/link'
 
-const STEPS = [
-  { title: 'Create a New Contacto', desc: 'Add your first contacto effortlessly and begin building meaningful engagement right away.', done: true },
-  { title: 'Import and engage with all your contactos instantly', desc: 'Import your existing contactos from various platforms and start engaging with them immediately.', done: true },
-  { title: 'Generate New Leads with a High-Converting Funnel', desc: 'Set up a high-converting funnel and form to capture leads efficiently.', done: true },
-  { title: 'Set Up Multi-Channel Communication & Start Engaging in Minutes', desc: 'Connect your email, SMS, and phone services in minutes and start multi-channel engagement quickly.', done: true },
-  { title: 'Launch Your First Campaign to Drive Engagement', desc: 'Design and send your first email campaign to engage over 1,000 contactos.', done: true },
-  { title: 'Nurture Leads with Automated Drip Campaigns', desc: 'Set up automated email and SMS drip campaigns to nurture 100+ leads over time.', done: true },
-  { title: 'Book More Appointments with Automated Scheduling', desc: 'Set up your calendar for automatic appointment bookings. Secure 20 appointments in the first week.', done: true },
-]
+interface Step {
+  title: string
+  desc: string
+  done: boolean
+  href: string
+}
 
-export default function LaunchpadPage() {
-  const completedCount = STEPS.filter((s) => s.done).length
-  const progress = Math.round((completedCount / STEPS.length) * 100)
+export default async function LaunchpadPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  let steps: Step[] = []
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('agency_id, full_name')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.agency_id) {
+      // Check real state
+      const { data: clients } = await supabase
+        .from('clients')
+        .select('id, gmb_location_id, config')
+        .eq('agency_id', profile.agency_id)
+
+      const clientList = (clients ?? []) as Array<{ id: string; gmb_location_id: string | null; config: Record<string, unknown> | null }>
+      const hasClient = clientList.length > 0
+      const hasGmb = clientList.some((c) => c.gmb_location_id)
+      const hasTwilio = clientList.some((c) => c.config?.twilio_wa_number)
+
+      const { count: leadCount } = await supabase
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .in('client_id', clientList.map((c: { id: string }) => c.id))
+
+      const { count: workflowCount } = await supabase
+        .from('workflows')
+        .select('id', { count: 'exact', head: true })
+        .in('client_id', clientList.map((c: { id: string }) => c.id))
+        .eq('active', true)
+
+      steps = [
+        {
+          title: 'Crear tu primer cliente',
+          desc: 'Agrega el primer negocio que vas a gestionar desde Skala.',
+          done: hasClient,
+          href: '/clients',
+        },
+        {
+          title: 'Conectar Google Business Profile',
+          desc: 'Vincula la cuenta de Google para responder resenas automaticamente con IA.',
+          done: hasGmb,
+          href: hasClient ? `/clients/${clientList[0].id}` : '/clients',
+        },
+        {
+          title: 'Configurar WhatsApp (Twilio)',
+          desc: 'Activa el chatbot de WhatsApp para recibir y responder mensajes automaticamente.',
+          done: hasTwilio,
+          href: '/settings',
+        },
+        {
+          title: 'Recibir tu primer lead',
+          desc: 'Cuando un contacto llegue por WhatsApp, web form o referido, aparecera aqui.',
+          done: (leadCount ?? 0) > 0,
+          href: '/contacts',
+        },
+        {
+          title: 'Activar automatizaciones',
+          desc: 'Configura flujos de auto-respuesta, nurture emails y alertas.',
+          done: (workflowCount ?? 0) > 0,
+          href: '/workflows',
+        },
+      ]
+    }
+  }
+
+  const completedCount = steps.filter((s) => s.done).length
+  const progress = steps.length ? Math.round((completedCount / steps.length) * 100) : 0
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 28 }}>
       <h1 style={{ fontFamily: 'var(--font-syne), Syne, sans-serif', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>
-        Guía de configuración
+        Guia de configuracion
       </h1>
       <p style={{ fontSize: 14, color: '#9090b0', marginBottom: 28 }}>
-        Hola Jossue, aquí tiene su lista de configuración personalizada con todo lo que necesita para empezar.
+        Completa estos pasos para tener tu agencia operativa.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 32 }}>
-        {/* Left: Categories */}
-        <div>
-          {CATEGORIES.map((cat) => (
-            <div key={cat.name} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '12px 16px', borderRadius: 10, marginBottom: 4, cursor: 'pointer',
-              background: cat.active ? 'rgba(59,130,246,0.1)' : 'transparent',
-              border: cat.active ? '1px solid rgba(59,130,246,0.2)' : '1px solid transparent',
-              color: cat.active ? '#3b82f6' : '#9090b0',
-              fontSize: 14, fontWeight: cat.active ? 500 : 400,
+      {/* Progress */}
+      <div style={{ marginBottom: 24, maxWidth: 600 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 13, color: '#9090b0' }}>{completedCount} de {steps.length} completados</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#e8e8f0' }}>{progress}%</span>
+        </div>
+        <div style={{ height: 8, background: 'rgba(255,255,255,0.05)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{
+            width: `${progress}%`, height: '100%',
+            background: progress === 100 ? '#10b981' : 'linear-gradient(90deg, #3b82f6, #7c3aed)',
+            borderRadius: 4, transition: 'width 0.3s',
+          }} />
+        </div>
+      </div>
+
+      {/* Steps */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 600 }}>
+        {steps.map((step, i) => (
+          <Link key={i} href={step.href} style={{ textDecoration: 'none' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 16,
+              padding: '18px 20px',
+              background: '#0f0f1a', border: '1px solid rgba(255,255,255,0.05)',
+              borderRadius: i === 0 ? '12px 12px 2px 2px' : i === steps.length - 1 ? '2px 2px 12px 12px' : '2px',
+              cursor: 'pointer',
             }}>
-              <span style={{ fontSize: 18 }}>{cat.icon}</span>
-              {cat.name}
-            </div>
-          ))}
-        </div>
-
-        {/* Right: Progress + steps */}
-        <div>
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 13, color: '#9090b0' }}>Su progreso de Foundational Setup.</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#e8e8f0' }}>{progress}%</span>
-            </div>
-            <div style={{ height: 8, background: 'rgba(255,255,255,0.05)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{
-                width: `${progress}%`, height: '100%',
-                background: 'linear-gradient(90deg, #3b82f6, #7c3aed)',
-                borderRadius: 4, transition: 'width 0.3s',
-              }} />
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {STEPS.map((step, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 16,
-                padding: '18px 20px',
-                background: '#0f0f1a', border: '1px solid rgba(255,255,255,0.05)',
-                borderRadius: i === 0 ? '12px 12px 2px 2px' : i === STEPS.length - 1 ? '2px 2px 12px 12px' : '2px',
+                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                background: step.done ? 'rgba(16,185,129,0.15)' : '#14141f',
+                border: step.done ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(255,255,255,0.07)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, color: step.done ? '#10b981' : '#6b6b8a',
               }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                  background: '#14141f', border: '1px solid rgba(255,255,255,0.07)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 14, color: '#6b6b8a',
-                }}>
-                  {step.done ? '👤' : (i + 1)}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: '#e8e8f0', marginBottom: 2 }}>{step.title}</div>
-                  <div style={{ fontSize: 12, color: '#6b6b8a', lineHeight: 1.5 }}>{step.desc}</div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  {step.done && (
-                    <span style={{
-                      display: 'flex', alignItems: 'center', gap: 4,
-                      fontSize: 12, color: '#10b981',
-                    }}>
-                      ✓ 100%
-                    </span>
-                  )}
-                  <span style={{ fontSize: 16, color: '#6b6b8a' }}>▾</span>
-                </div>
+                {step.done ? '✓' : (i + 1)}
               </div>
-            ))}
-          </div>
-        </div>
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  fontSize: 14, fontWeight: 500, marginBottom: 2,
+                  color: step.done ? '#6b6b8a' : '#e8e8f0',
+                  textDecoration: step.done ? 'line-through' : 'none',
+                }}>{step.title}</div>
+                <div style={{ fontSize: 12, color: '#6b6b8a', lineHeight: 1.5 }}>{step.desc}</div>
+              </div>
+              {step.done ? (
+                <span style={{ fontSize: 12, color: '#10b981', flexShrink: 0 }}>Completado</span>
+              ) : (
+                <span style={{ fontSize: 12, color: '#7c3aed', flexShrink: 0 }}>Configurar →</span>
+              )}
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   )

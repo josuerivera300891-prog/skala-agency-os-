@@ -4,12 +4,27 @@ import type { Client } from '@/types'
 
 export default async function ClientsPage() {
   const supabase = await createClient()
-  const { data: clients } = await supabase
-    .from('clients')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const allClients = (clients as Client[]) ?? []
+  let allClients: Client[] = []
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('agency_id')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.agency_id) {
+      const { data: clients } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('agency_id', profile.agency_id)
+        .order('created_at', { ascending: false })
+
+      allClients = (clients as Client[]) ?? []
+    }
+  }
 
   return (
     <div style={{ padding: 28, overflowY: 'auto', flex: 1 }}>

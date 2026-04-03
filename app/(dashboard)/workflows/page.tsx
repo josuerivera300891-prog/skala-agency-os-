@@ -6,12 +6,36 @@ const TABS = ['Todos los flujos ...', 'Requiere revisió...', 'Eliminado']
 
 export default async function WorkflowsPage() {
   const supabase = await createClient()
-  const { data: workflows } = await supabase
-    .from('workflows')
-    .select('*, clients(name)')
-    .order('created_at', { ascending: false })
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const allWorkflows = (workflows as (Workflow & { clients: { name: string } | null })[]) ?? []
+  let allWorkflows: (Workflow & { clients: { name: string } | null })[] = []
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('agency_id')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.agency_id) {
+      const { data: agencyClients } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('agency_id', profile.agency_id)
+
+      const clientIds = (agencyClients ?? []).map((c: { id: string }) => c.id)
+
+      if (clientIds.length > 0) {
+        const { data: workflows } = await supabase
+          .from('workflows')
+          .select('*, clients(name)')
+          .in('client_id', clientIds)
+          .order('created_at', { ascending: false })
+
+        allWorkflows = (workflows as (Workflow & { clients: { name: string } | null })[]) ?? []
+      }
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>

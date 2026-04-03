@@ -6,13 +6,37 @@ const TABS = ['Visión general', 'Solicitudes', 'Reseñas', 'Testimonios en vide
 
 export default async function ReputationPage() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: reviews } = await supabase
-    .from('reviews')
-    .select('*')
-    .order('created_at', { ascending: false })
+  let allReviews: Review[] = []
 
-  const allReviews = (reviews as Review[]) ?? []
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('agency_id')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.agency_id) {
+      // Obtener IDs de clientes de la agencia
+      const { data: agencyClients } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('agency_id', profile.agency_id)
+
+      const clientIds = (agencyClients ?? []).map((c: { id: string }) => c.id)
+
+      if (clientIds.length > 0) {
+        const { data: reviews } = await supabase
+          .from('reviews')
+          .select('*')
+          .in('client_id', clientIds)
+          .order('created_at', { ascending: false })
+
+        allReviews = (reviews as Review[]) ?? []
+      }
+    }
+  }
 
   const avgRating = allReviews.length
     ? (allReviews.reduce((acc, r) => acc + r.rating, 0) / allReviews.length).toFixed(1)
