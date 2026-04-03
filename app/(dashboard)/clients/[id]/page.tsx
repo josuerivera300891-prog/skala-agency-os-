@@ -20,12 +20,13 @@ export default async function ClientOverview({ params }: { params: Promise<{ id:
   if (!profile?.agency_id) return null
 
   // 2. Consultar datos filtrando por el agency_id del perfil
-  const [{ data: client }, { data: reviews }, { data: leads }, { data: workflows }] =
+  const [{ data: client }, { data: reviews }, { data: leads }, { data: workflows }, { data: walletTx }] =
     await Promise.all([
       supabase.from('clients').select('*').eq('id', id).eq('agency_id', profile.agency_id).single(),
       supabase.from('reviews').select('*').eq('client_id', id).order('created_at', { ascending: false }).limit(5),
       supabase.from('leads').select('*').eq('client_id', id).order('created_at', { ascending: false }).limit(5),
       supabase.from('workflows').select('*').eq('client_id', id).eq('active', true),
+      supabase.from('wallet_transactions').select('*').eq('client_id', id).order('created_at', { ascending: false }).limit(5),
     ])
 
 
@@ -141,6 +142,48 @@ export default async function ClientOverview({ params }: { params: Promise<{ id:
             <div style={{ fontSize: 12, color: '#6b6b8a', marginTop: 4 }}>{s.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* Wallet */}
+      <div style={{
+        background: '#0f0f1a', border: '1px solid rgba(255,255,255,0.07)',
+        borderRadius: 12, padding: '20px 24px', marginBottom: 28,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 13, color: '#6b6b8a', marginBottom: 4 }}>Billetera</div>
+            <div style={{ fontSize: 28, fontWeight: 700, fontFamily: 'Syne, sans-serif', color: '#10b981' }}>
+              ${Number(c.wallet_balance ?? 0).toFixed(2)}
+            </div>
+          </div>
+          <Link href={`/sites`} style={{
+            padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none',
+            background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)',
+          }}>
+            Comprar dominio
+          </Link>
+        </div>
+        {(walletTx ?? []).length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, color: '#6b6b8a', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Ultimas transacciones
+            </div>
+            {(walletTx as Array<{ id: string; amount: number; type: string; description: string; created_at: string }>).map((tx) => (
+              <div key={tx.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: 12,
+              }}>
+                <span style={{ color: '#9090b0' }}>{tx.description}</span>
+                <span style={{
+                  fontFamily: 'var(--font-dm-mono), DM Mono, monospace', fontWeight: 600,
+                  color: tx.type === 'credit' ? '#10b981' : '#ef4444',
+                }}>
+                  {tx.type === 'credit' ? '+' : ''}${Number(tx.amount).toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent Leads */}

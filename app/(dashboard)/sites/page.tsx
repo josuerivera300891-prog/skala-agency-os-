@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,6 +26,12 @@ interface DnsRecord {
   content: string
   proxied: boolean
   ttl: number
+}
+
+interface ClientOption {
+  id: string
+  name: string
+  wallet_balance: number
 }
 
 type Tab = 'search' | 'domains' | 'dns'
@@ -60,6 +67,14 @@ const btnGhost: React.CSSProperties = {
 export default function SitesPage() {
   const [activeTab, setActiveTab] = useState<Tab>('search')
 
+  // Client & wallet state
+  const [clients, setClients] = useState<ClientOption[]>([])
+  const [selectedClientId, setSelectedClientId] = useState('')
+  const [domainMarkup, setDomainMarkup] = useState(1)
+  const [showCreditForm, setShowCreditForm] = useState(false)
+  const [creditAmount, setCreditAmount] = useState('')
+  const [creditLoading, setCreditLoading] = useState(false)
+
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<DomainSearchResult[]>([])
@@ -87,6 +102,55 @@ export default function SitesPage() {
   const [dnsFormContent, setDnsFormContent] = useState('')
   const [dnsFormProxied, setDnsFormProxied] = useState(false)
   const [dnsFormSaving, setDnsFormSaving] = useState(false)
+
+  // -------------------------------------------------------------------------
+  // Derived state
+  // -------------------------------------------------------------------------
+  const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null
+
+  // -------------------------------------------------------------------------
+  // Load clients + agency markup on mount
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    async function loadInitialData() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('agency_id')
+        .eq('id', user.id)
+        .single()
+
+      if (!profile?.agency_id) return
+
+      // Load clients with wallet_balance
+      const { data: agencyClients } = await supabase
+        .from('clients')
+        .select('id, name, wallet_balance')
+        .eq('agency_id', profile.agency_id)
+        .order('name')
+
+      if (agencyClients) {
+        setClients(agencyClients as ClientOption[])
+      }
+
+      // Load agency markup
+      try {
+        const res = await fetch('/api/settings')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.agency?.domain_markup) {
+            setDomainMarkup(data.agency.domain_markup)
+          }
+        }
+      } catch {
+        // fallback to 1x markup
+      }
+    }
+    loadInitialData()
+  }, [])
 
   // -------------------------------------------------------------------------
   // Search domains
@@ -120,9 +184,10 @@ export default function SitesPage() {
   }
 
   // -------------------------------------------------------------------------
-  // Register domain
+  // Register domain (with wallet)
   // -------------------------------------------------------------------------
   const handleRegister = async (domain: string) => {
+    if (!selectedClientId) return
     setRegisteringDomain(domain)
     setRegisterError('')
     setRegisterSuccess('')
@@ -131,18 +196,67 @@ export default function SitesPage() {
       const res = await fetch('/api/domains', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'register', domain }),
+        body: JSON.stringify({ action: 'register', domain, clientId: selectedClientId }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setRegisterError(data.error ?? 'Error al registrar dominio')
+        if (res.status === 402) {
+          setRegisterError(`Saldo insuficiente. Necesitas $${data.required?.toFixed(2)} pero tienes $${data.balance?.toFixed(2)}`)
+        } else {
+          setRegisterError(data.error ?? 'Error al registrar dominio')
+        }
       } else {
-        setRegisterSuccess(`Dominio ${data.domain} registrado exitosamente`)
+        setRegisterSuccess(`Dominio ${domain} registrado. Cobrado: $${data.charged?.toFixed(2)}. Nuevo saldo: $${data.newBalance?.toFixed(2)}`)
+        // Update client balance in local state
+        setClients((prev) =>
+          prev.map((c) =>
+            c.id === selectedClientId
+              ? { ...c, wallet_balance: data.newBalance ?? c.wallet_balance }
+              : c,
+          ),
+        )
       }
     } catch {
       setRegisterError('Error de conexion')
     } finally {
       setRegisteringDomain(null)
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Add credit to wallet
+  // -------------------------------------------------------------------------
+  const handleAddCredit = async () => {
+    const amount = parseFloat(creditAmount)
+    if (!selectedClientId || isNaN(amount) || amount <= 0) return
+    setCreditLoading(true)
+
+    try {
+      const res = await fetch('/api/wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: selectedClientId,
+          amount,
+          description: 'Credito agregado manualmente',
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setClients((prev) =>
+          prev.map((c) =>
+            c.id === selectedClientId
+              ? { ...c, wallet_balance: data.balance ?? c.wallet_balance }
+              : c,
+          ),
+        )
+        setCreditAmount('')
+        setShowCreditForm(false)
+      }
+    } catch {
+      // silent
+    } finally {
+      setCreditLoading(false)
     }
   }
 
@@ -246,6 +360,14 @@ export default function SitesPage() {
   }
 
   // -------------------------------------------------------------------------
+  // Price helpers
+  // -------------------------------------------------------------------------
+  const getMarkupPrice = (basePrice: number | undefined): number | null => {
+    if (basePrice == null) return null
+    return Math.round(basePrice * domainMarkup * 100) / 100
+  }
+
+  // -------------------------------------------------------------------------
   // Tab pill style helper
   // -------------------------------------------------------------------------
   const tabStyle = (tab: Tab): React.CSSProperties => ({
@@ -272,6 +394,77 @@ export default function SitesPage() {
               Buscar, comprar y administrar dominios
             </p>
           </div>
+        </div>
+
+        {/* Client selector + balance */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label style={{ fontSize: 12, color: '#9090b0', whiteSpace: 'nowrap' }}>Comprar para:</label>
+            <select
+              value={selectedClientId}
+              onChange={(e) => { setSelectedClientId(e.target.value); setShowCreditForm(false) }}
+              style={{ ...selectStyle, width: 220 }}
+            >
+              <option value="">Seleccionar cliente...</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {selectedClient && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)',
+                color: '#a78bfa', fontFamily: 'var(--font-dm-mono), DM Mono, monospace',
+              }}>
+                Saldo: ${(selectedClient.wallet_balance ?? 0).toFixed(2)}
+              </div>
+
+              {!showCreditForm ? (
+                <button
+                  onClick={() => setShowCreditForm(true)}
+                  style={{
+                    padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                    cursor: 'pointer', border: '1px solid rgba(16,185,129,0.3)',
+                    background: 'rgba(16,185,129,0.1)', color: '#10b981',
+                  }}
+                >
+                  + Agregar credito
+                </button>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={creditAmount}
+                    onChange={(e) => setCreditAmount(e.target.value)}
+                    placeholder="Monto"
+                    style={{ ...inputStyle, width: 100 }}
+                  />
+                  <button
+                    onClick={handleAddCredit}
+                    disabled={creditLoading || !creditAmount || parseFloat(creditAmount) <= 0}
+                    style={{
+                      ...btnPrimary,
+                      padding: '6px 14px', fontSize: 12,
+                      opacity: creditLoading ? 0.5 : 1,
+                    }}
+                  >
+                    {creditLoading ? '...' : 'Agregar'}
+                  </button>
+                  <button
+                    onClick={() => { setShowCreditForm(false); setCreditAmount('') }}
+                    style={{ ...btnGhost, padding: '6px 10px', fontSize: 12 }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -363,10 +556,10 @@ export default function SitesPage() {
                 display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16,
               }}>
                 {[
-                  { icon: '💰', label: 'Precio de costo' },
-                  { icon: '🔒', label: 'SSL incluido' },
-                  { icon: '⚡', label: 'DNS automatico' },
-                  { icon: '🏠', label: 'Todo en un lugar' },
+                  { icon: '\uD83D\uDCB0', label: 'Precio de costo' },
+                  { icon: '\uD83D\uDD12', label: 'SSL incluido' },
+                  { icon: '\u26A1', label: 'DNS automatico' },
+                  { icon: '\uD83C\uDFE0', label: 'Todo en un lugar' },
                 ].map((b) => (
                   <div key={b.label} style={{
                     background: '#0f0f1a', border: '1px solid rgba(255,255,255,0.07)',
@@ -379,60 +572,81 @@ export default function SitesPage() {
                 ))}
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
-                {searchResults.map((result) => (
-                  <div
-                    key={result.domain}
-                    style={{
-                      background: '#0f0f1a', border: '1px solid rgba(255,255,255,0.07)',
-                      borderRadius: 12, padding: '16px 20px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                      <span style={{
-                        fontSize: 15, fontWeight: 600, color: '#e8e8f0',
-                        fontFamily: 'var(--font-dm-mono), DM Mono, monospace',
-                      }}>
-                        {result.domain}
-                      </span>
-                      <span style={{
-                        padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                        background: result.available ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-                        color: result.available ? '#10b981' : '#ef4444',
-                      }}>
-                        {result.available ? 'Disponible' : 'No disponible'}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      {result.price != null && (
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{
-                            fontSize: 14, fontWeight: 600, color: '#a78bfa',
-                            fontFamily: 'var(--font-dm-mono), DM Mono, monospace',
-                          }}>
-                            ${result.price}/yr
+                {searchResults.map((result) => {
+                  const markupPrice = getMarkupPrice(result.price)
+                  const balance = selectedClient?.wallet_balance ?? 0
+                  const insufficientFunds = markupPrice != null && selectedClient != null && balance < markupPrice
+
+                  return (
+                    <div
+                      key={result.domain}
+                      style={{
+                        background: '#0f0f1a', border: '1px solid rgba(255,255,255,0.07)',
+                        borderRadius: 12, padding: '16px 20px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <span style={{
+                          fontSize: 15, fontWeight: 600, color: '#e8e8f0',
+                          fontFamily: 'var(--font-dm-mono), DM Mono, monospace',
+                        }}>
+                          {result.domain}
+                        </span>
+                        <span style={{
+                          padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                          background: result.available ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+                          color: result.available ? '#10b981' : '#ef4444',
+                        }}>
+                          {result.available ? 'Disponible' : 'No disponible'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        {markupPrice != null && (
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{
+                              fontSize: 14, fontWeight: 600, color: '#a78bfa',
+                              fontFamily: 'var(--font-dm-mono), DM Mono, monospace',
+                            }}>
+                              ${markupPrice.toFixed(2)}/yr
+                            </div>
+                            <div style={{ fontSize: 10, color: '#6b6b8a' }}>
+                              Se renueva el ${markupPrice.toFixed(2)}
+                            </div>
                           </div>
-                          <div style={{ fontSize: 10, color: '#6b6b8a' }}>
-                            Se renueva el ${result.price}
-                          </div>
-                        </div>
-                      )}
-                      {result.available && (
-                        <button
-                          onClick={() => handleRegister(result.domain)}
-                          disabled={registeringDomain === result.domain}
-                          style={{
-                            ...btnPrimary,
-                            padding: '8px 18px',
-                            opacity: registeringDomain === result.domain ? 0.5 : 1,
-                          }}
-                        >
-                          {registeringDomain === result.domain ? 'Comprando...' : 'Comprar'}
-                        </button>
-                      )}
+                        )}
+                        {result.available && (
+                          insufficientFunds ? (
+                            <button
+                              disabled
+                              style={{
+                                padding: '8px 18px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.3)',
+                                background: 'rgba(239,68,68,0.08)', color: '#ef4444',
+                                fontSize: 12, fontWeight: 500, cursor: 'not-allowed',
+                              }}
+                            >
+                              Saldo insuficiente
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleRegister(result.domain)}
+                              disabled={registeringDomain === result.domain || !selectedClientId}
+                              title={!selectedClientId ? 'Selecciona un cliente primero' : undefined}
+                              style={{
+                                ...btnPrimary,
+                                padding: '8px 18px',
+                                opacity: registeringDomain === result.domain || !selectedClientId ? 0.5 : 1,
+                                cursor: !selectedClientId ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              {registeringDomain === result.domain ? 'Comprando...' : !selectedClientId ? 'Selecciona cliente' : 'Comprar'}
+                            </button>
+                          )
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
               </>
             )}

@@ -26,6 +26,7 @@ interface AgencyData {
   country: string | null
   timezone: string | null
   locale: string | null
+  domain_markup: number | null
 }
 
 const SIDEBAR_SECTIONS = [
@@ -66,6 +67,7 @@ export default function SettingsPage() {
         legal_name: agency.legal_name,
         phone: agency.phone,
         website: agency.website,
+        domain_markup: agency.domain_markup,
         address: agency.address,
         city: agency.city,
         state: agency.state,
@@ -166,6 +168,20 @@ export default function SettingsPage() {
                   <FormField label="Telefono" value={agency.phone ?? ''} onChange={(v) => update('phone', v)} />
                 </div>
                 <FormField label="Sitio web" value={agency.website ?? ''} onChange={(v) => update('website', v)} placeholder="https://" />
+                <FormField
+                  label="Markup de dominios (%)"
+                  value={agency.domain_markup ? String(Math.round((agency.domain_markup - 1) * 100)) : ''}
+                  onChange={(v) => {
+                    if (!agency) return
+                    const pct = parseFloat(v)
+                    if (v === '') {
+                      setAgency({ ...agency, domain_markup: null })
+                    } else if (!isNaN(pct)) {
+                      setAgency({ ...agency, domain_markup: 1 + pct / 100 })
+                    }
+                  }}
+                  placeholder="25"
+                />
               </div>
 
               {/* Right: Address */}

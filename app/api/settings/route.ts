@@ -15,6 +15,7 @@ const updateSchema = z.object({
   country:    z.string().optional(),
   timezone:   z.string().optional(),
   locale:     z.string().optional(),
+  domain_markup: z.number().min(1).max(5).optional(),
 })
 
 async function getAuthClient(req: NextRequest) {

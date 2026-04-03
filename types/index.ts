@@ -40,8 +40,21 @@ export interface Client {
   email?: string
   domain?: string
   stripe_customer_id?: string
+  wallet_balance: number
   active: boolean
   config: ClientConfig
+  created_at: string
+}
+
+export interface WalletTransaction {
+  id: string
+  client_id: string
+  amount: number
+  type: 'credit' | 'debit' | 'refund'
+  description: string
+  reference_id: string | null
+  balance_after: number
+  created_by: string | null
   created_at: string
 }
 
