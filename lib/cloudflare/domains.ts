@@ -8,16 +8,18 @@ import { logger } from '@/lib/logger'
 const CF_BASE = 'https://api.cloudflare.com/client/v4'
 
 function getConfig() {
-  const token = process.env.CLOUDFLARE_API_TOKEN
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID
-  if (!token) throw new Error('CLOUDFLARE_API_TOKEN not configured')
+  const apiKey = process.env.CLOUDFLARE_API_KEY
+  const email = process.env.CLOUDFLARE_EMAIL
   if (!accountId) throw new Error('CLOUDFLARE_ACCOUNT_ID not configured')
-  return { token, accountId }
+  if (!apiKey || !email) throw new Error('CLOUDFLARE_API_KEY and CLOUDFLARE_EMAIL not configured')
+  return { apiKey, email, accountId }
 }
 
-function headers(token: string): HeadersInit {
+function authHeaders(apiKey: string, email: string): HeadersInit {
   return {
-    'Authorization': `Bearer ${token}`,
+    'X-Auth-Key': apiKey,
+    'X-Auth-Email': email,
     'Content-Type': 'application/json',
   }
 }
@@ -82,13 +84,14 @@ export interface NewDnsRecord {
 
 async function cfFetch<T>(
   url: string,
-  token: string,
+  apiKey: string,
+  email: string,
   options: RequestInit = {},
 ): Promise<CloudflareResult<T>> {
   const res = await fetch(url, {
     ...options,
     headers: {
-      ...headers(token),
+      ...authHeaders(apiKey, email),
       ...(options.headers as Record<string, string> | undefined),
     },
   })
@@ -108,33 +111,96 @@ async function cfFetch<T>(
 // Domain search / availability check
 // ---------------------------------------------------------------------------
 
-const DEFAULT_TLDS = ['.com', '.net', '.org', '.io', '.co', '.app']
+// RDAP only reliably works for .com and .net via Verisign
+const RDAP_SERVER = 'https://rdap.verisign.com/com/v1'
+
+// Approximate yearly prices (Cloudflare at-cost pricing)
+const TLD_PRICES: Record<string, number> = {
+  com: 9.77, net: 10.77, org: 10.11, io: 33.98, co: 11.50,
+}
+
+// Prefixes and suffixes to generate domain suggestions (like GHL)
+const PREFIXES = ['', 'get', 'my', 'the', 'go', 'try']
+const SUFFIXES = ['', 'app', 'hq', 'online', 'site', 'now', 'pro', 'hub']
+
+function generateSuggestions(base: string): string[] {
+  const clean = base.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const suggestions = new Set<string>()
+
+  // Exact match first
+  suggestions.add(`${clean}.com`)
+  suggestions.add(`${clean}.net`)
+  suggestions.add(`${clean}.org`)
+  suggestions.add(`${clean}.co`)
+
+  // Variations with prefixes/suffixes (.com only for speed)
+  for (const prefix of PREFIXES) {
+    for (const suffix of SUFFIXES) {
+      if (!prefix && !suffix) continue // skip bare (already added)
+      const name = `${prefix}${clean}${suffix}`
+      if (name.length >= 3 && name.length <= 63) {
+        suggestions.add(`${name}.com`)
+      }
+    }
+  }
+
+  return Array.from(suggestions).slice(0, 20) // max 20 to keep fast
+}
 
 /**
- * Check availability and pricing for a domain across common TLDs.
- * @param query - bare domain name or full domain (e.g. "mydomain" or "mydomain.com")
+ * Check availability for domain suggestions using RDAP.
+ * Generates variations like GHL (getskala.com, skalahq.com, etc.)
  */
 export async function searchDomains(query: string): Promise<DomainAvailability[]> {
-  const { token, accountId } = getConfig()
+  const cleanQuery = query.toLowerCase().replace(/[^a-z0-9.-]/g, '')
+  const hasTld = cleanQuery.includes('.')
+  const domains = hasTld ? [cleanQuery] : generateSuggestions(cleanQuery)
 
-  // Build list of domains to check
-  const hasTld = query.includes('.')
-  const domains = hasTld
-    ? [query]
-    : DEFAULT_TLDS.map((tld) => `${query}${tld}`)
+  logger.info('[Domains] Checking availability via RDAP', { count: domains.length })
 
-  logger.info('[Cloudflare] Checking domain availability', { domains })
+  const results = await Promise.all(
+    domains.map(async (domain): Promise<DomainAvailability> => {
+      const tld = domain.split('.').pop() ?? 'com'
+      const rdapUrl = tld === 'net'
+        ? `https://rdap.verisign.com/net/v1/domain/${domain}`
+        : tld === 'com'
+          ? `${RDAP_SERVER}/domain/${domain}`
+          : null
 
-  const data = await cfFetch<DomainAvailability[]>(
-    `${CF_BASE}/accounts/${accountId}/registrar/domains/check`,
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify({ domains }),
-    },
+      // For non .com/.net TLDs, just include them as suggestions without live check
+      if (!rdapUrl) {
+        return {
+          domain,
+          available: true, // optimistic — will fail at registration if taken
+          premium: false,
+          price: TLD_PRICES[tld],
+          currency: 'USD',
+        }
+      }
+
+      try {
+        const res = await fetch(rdapUrl, {
+          signal: AbortSignal.timeout(4000),
+        })
+        return {
+          domain,
+          available: res.status === 404,
+          premium: false,
+          price: TLD_PRICES[tld],
+          currency: 'USD',
+        }
+      } catch {
+        return { domain, available: false, premium: false }
+      }
+    })
   )
 
-  return data.result
+  // Sort: available first, then by price
+  return results.sort((a, b) => {
+    if (a.available && !b.available) return -1
+    if (!a.available && b.available) return 1
+    return (a.price ?? 99) - (b.price ?? 99)
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -145,13 +211,13 @@ export async function registerDomain(
   domain: string,
   autoRenew = true,
 ): Promise<RegisteredDomain> {
-  const { token, accountId } = getConfig()
+  const { apiKey, email, accountId } = getConfig()
 
   logger.info('[Cloudflare] Registering domain', { domain, autoRenew })
 
   const data = await cfFetch<RegisteredDomain>(
     `${CF_BASE}/accounts/${accountId}/registrar/domains/${domain}/register`,
-    token,
+    apiKey, email,
     {
       method: 'POST',
       body: JSON.stringify({ auto_renew: autoRenew }),
@@ -167,13 +233,13 @@ export async function registerDomain(
 // ---------------------------------------------------------------------------
 
 export async function listDomains(): Promise<RegisteredDomain[]> {
-  const { token, accountId } = getConfig()
+  const { apiKey, email, accountId } = getConfig()
 
   logger.debug('[Cloudflare] Listing domains')
 
   const data = await cfFetch<RegisteredDomain[]>(
     `${CF_BASE}/accounts/${accountId}/registrar/domains`,
-    token,
+    apiKey, email,
   )
 
   return data.result
@@ -184,11 +250,11 @@ export async function listDomains(): Promise<RegisteredDomain[]> {
 // ---------------------------------------------------------------------------
 
 export async function getDomainDetail(domain: string): Promise<DomainDetail> {
-  const { token, accountId } = getConfig()
+  const { apiKey, email, accountId } = getConfig()
 
   const data = await cfFetch<DomainDetail>(
     `${CF_BASE}/accounts/${accountId}/registrar/domains/${domain}`,
-    token,
+    apiKey, email,
   )
 
   return data.result
@@ -199,11 +265,11 @@ export async function getDomainDetail(domain: string): Promise<DomainDetail> {
 // ---------------------------------------------------------------------------
 
 export async function listDnsRecords(zoneId: string): Promise<DnsRecord[]> {
-  const { token } = getConfig()
+  const { apiKey, email } = getConfig()
 
   const data = await cfFetch<DnsRecord[]>(
     `${CF_BASE}/zones/${zoneId}/dns_records`,
-    token,
+    apiKey, email,
   )
 
   return data.result
@@ -217,13 +283,13 @@ export async function addDnsRecord(
   zoneId: string,
   record: NewDnsRecord,
 ): Promise<DnsRecord> {
-  const { token } = getConfig()
+  const { apiKey, email } = getConfig()
 
   logger.info('[Cloudflare] Adding DNS record', { zoneId, type: record.type, name: record.name })
 
   const data = await cfFetch<DnsRecord>(
     `${CF_BASE}/zones/${zoneId}/dns_records`,
-    token,
+    apiKey, email,
     {
       method: 'POST',
       body: JSON.stringify(record),

@@ -357,7 +357,28 @@ export default function SitesPage() {
             )}
 
             {!searching && searchResults.length > 0 && (
-              <div style={{ display: 'grid', gap: 12 }}>
+              <>
+              {/* Benefits bar */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16,
+              }}>
+                {[
+                  { icon: '💰', label: 'Precio de costo' },
+                  { icon: '🔒', label: 'SSL incluido' },
+                  { icon: '⚡', label: 'DNS automatico' },
+                  { icon: '🏠', label: 'Todo en un lugar' },
+                ].map((b) => (
+                  <div key={b.label} style={{
+                    background: '#0f0f1a', border: '1px solid rgba(255,255,255,0.07)',
+                    borderRadius: 10, padding: '12px 16px', textAlign: 'center',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}>
+                    <span style={{ fontSize: 16 }}>{b.icon}</span>
+                    <span style={{ fontSize: 12, color: '#9090b0' }}>{b.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
                 {searchResults.map((result) => (
                   <div
                     key={result.domain}
@@ -384,12 +405,17 @@ export default function SitesPage() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                       {result.price != null && (
-                        <span style={{
-                          fontSize: 14, fontWeight: 600, color: '#a78bfa',
-                          fontFamily: 'var(--font-dm-mono), DM Mono, monospace',
-                        }}>
-                          ${result.price}/ano
-                        </span>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{
+                            fontSize: 14, fontWeight: 600, color: '#a78bfa',
+                            fontFamily: 'var(--font-dm-mono), DM Mono, monospace',
+                          }}>
+                            ${result.price}/yr
+                          </div>
+                          <div style={{ fontSize: 10, color: '#6b6b8a' }}>
+                            Se renueva el ${result.price}
+                          </div>
+                        </div>
                       )}
                       {result.available && (
                         <button
@@ -408,6 +434,7 @@ export default function SitesPage() {
                   </div>
                 ))}
               </div>
+              </>
             )}
 
             {!searching && searchResults.length === 0 && !searchError && searchQuery === '' && (
