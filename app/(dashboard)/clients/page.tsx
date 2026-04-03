@@ -28,7 +28,7 @@ export default async function ClientsPage() {
 
   return (
     <div style={{ padding: 28, overflowY: 'auto', flex: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
         <div>
           <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: 22, fontWeight: 700, margin: 0 }}>
             Clientes
@@ -37,6 +37,13 @@ export default async function ClientsPage() {
             {allClients.length} clientes registrados
           </p>
         </div>
+        <Link href="/clients/new" style={{
+          padding: '10px 20px', borderRadius: 8, border: 'none', textDecoration: 'none',
+          background: 'linear-gradient(135deg,#ff2ea8,#7c3aed)', color: '#fff',
+          fontSize: 13, fontWeight: 600,
+        }}>
+          + Agregar cliente
+        </Link>
       </div>
 
       {allClients.length === 0 ? (

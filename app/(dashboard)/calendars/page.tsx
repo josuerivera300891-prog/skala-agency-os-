@@ -33,13 +33,29 @@ export default function CalendarsPage() {
           margin: '0 0 8px',
           fontFamily: 'var(--font-syne), Syne, sans-serif',
         }}>
-          Próximamente
+          Coming in v2
         </h2>
         <p style={{ fontSize: 13, color: '#6b6b8a', maxWidth: 400, margin: '0 auto' }}>
-          Calendario integrado para agendar reuniones con clientes, follow-ups automáticos y sincronización con Google Calendar.
+          Mientras tanto, usa Cal.com o Calendly para agendar citas.
         </p>
+        <a
+          href="#"
+          style={{
+            display: 'inline-block',
+            marginTop: 20,
+            padding: '8px 18px',
+            borderRadius: 8,
+            background: 'rgba(59,130,246,0.12)',
+            color: '#60a5fa',
+            fontSize: 13,
+            fontWeight: 500,
+            textDecoration: 'none',
+          }}
+        >
+          Abrir enlace de reservas externo
+        </a>
         <div style={{
-          marginTop: 20,
+          marginTop: 16,
           display: 'inline-block',
           padding: '6px 14px',
           borderRadius: 20,
@@ -49,7 +65,7 @@ export default function CalendarsPage() {
           fontWeight: 600,
           fontFamily: 'var(--font-dm-mono), DM Mono, monospace',
         }}>
-          EN DESARROLLO
+          COMING IN V2
         </div>
       </div>
     </div>

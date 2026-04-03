@@ -4,6 +4,7 @@ import twilio from 'twilio'
 import { createServiceClient } from '@/lib/supabase/server'
 import { generateWhatsAppReply } from '@/lib/claude/whatsapp-bot'
 import { sendWhatsApp } from '@/lib/twilio/whatsapp'
+import { rateLimit } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import type { Client } from '@/types'
 
@@ -53,6 +54,13 @@ export async function POST(req: NextRequest) {
   }
 
   const { From: from, To: to, Body: message } = validation.data
+
+  // Rate limiting: 20 mensajes por minuto por número
+  const { allowed } = rateLimit({ key: from, maxRequests: 20, windowMs: 60_000 })
+  if (!allowed) {
+    logger.warn('[Twilio Webhook] Rate limit excedido', { from })
+    return twimlEmpty()
+  }
 
   const supabase = createServiceClient()
 

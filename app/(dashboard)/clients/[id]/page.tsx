@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import type { Client, Lead, Review } from '@/types'
+import ClientEditPanel from '@/components/clients/ClientEditPanel'
 
 export default async function ClientOverview({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -74,14 +75,17 @@ export default async function ClientOverview({ params }: { params: Promise<{ id:
               {c.vertical} · {c.active ? 'Activo' : 'Inactivo'}
             </p>
           </div>
-          {c.gmb_location_id && (
-            <Link href={`/api/auth/google?clientId=${id}`} style={{
-              marginLeft: 'auto', padding: '7px 14px', borderRadius: 8, fontSize: 12,
-              background: 'rgba(255,46,168,0.15)', color: '#ff2ea8', textDecoration: 'none', border: '1px solid rgba(255,46,168,0.3)',
-            }}>
-              Reconectar GMB
-            </Link>
-          )}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <ClientEditPanel client={c} />
+            {c.gmb_location_id && (
+              <Link href={`/api/auth/google?clientId=${id}`} style={{
+                padding: '7px 14px', borderRadius: 8, fontSize: 12,
+                background: 'rgba(255,46,168,0.15)', color: '#ff2ea8', textDecoration: 'none', border: '1px solid rgba(255,46,168,0.3)',
+              }}>
+                Reconectar GMB
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}

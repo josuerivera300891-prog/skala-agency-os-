@@ -33,10 +33,10 @@ export default function PaymentsPage() {
           margin: '0 0 8px',
           fontFamily: 'var(--font-syne), Syne, sans-serif',
         }}>
-          Próximamente
+          Coming in v2
         </h2>
         <p style={{ fontSize: 13, color: '#6b6b8a', maxWidth: 400, margin: '0 auto' }}>
-          Gestión completa de pagos con Stripe. Suscripciones mensuales configurables por cliente, facturación automática e historial de transacciones.
+          Integración con Stripe para cobros automáticos a clientes.
         </p>
         <div style={{
           marginTop: 20,
@@ -49,7 +49,7 @@ export default function PaymentsPage() {
           fontWeight: 600,
           fontFamily: 'var(--font-dm-mono), DM Mono, monospace',
         }}>
-          EN DESARROLLO
+          COMING IN V2
         </div>
       </div>
     </div>

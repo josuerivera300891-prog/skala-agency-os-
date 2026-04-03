@@ -3,6 +3,15 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
+interface IntegrationStatus {
+  google: boolean
+  ai: boolean
+  twilio: boolean
+  resend: boolean
+  stripe: boolean
+  supabase: boolean
+}
+
 interface AgencyData {
   id: string
   name: string
@@ -29,6 +38,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [integrations, setIntegrations] = useState<IntegrationStatus>({
+    google: false, ai: false, twilio: false, resend: false, stripe: false, supabase: true,
+  })
   const router = useRouter()
 
   useEffect(() => {
@@ -36,6 +48,10 @@ export default function SettingsPage() {
       .then((r) => r.json())
       .then((d) => { if (d.agency) setAgency(d.agency) })
       .finally(() => setLoading(false))
+
+    fetch('/api/settings/integrations')
+      .then((r) => r.json())
+      .then((d) => { if (!d.error) setIntegrations(d) })
   }, [])
 
   const handleSave = async () => {
@@ -178,12 +194,12 @@ export default function SettingsPage() {
               Estado de conexion de servicios externos
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <IntegrationCard name="Google Business Profile" icon="G" description="Respuestas automaticas a resenas" connected={false} />
-              <IntegrationCard name="Claude AI (Anthropic)" icon="✦" description="Generacion de respuestas inteligentes" connected={false} />
-              <IntegrationCard name="Twilio (WhatsApp + SMS)" icon="💬" description="Chatbot y mensajeria" connected={false} />
-              <IntegrationCard name="Resend (Email)" icon="📧" description="Secuencias de nurture y reportes" connected={false} />
-              <IntegrationCard name="Stripe (Pagos)" icon="💳" description="Facturacion a clientes" connected={false} />
-              <IntegrationCard name="Supabase (Base de datos)" icon="⚡" description="Almacenamiento y autenticacion" connected={true} />
+              <IntegrationCard name="Google Business Profile" icon="G" description="Respuestas automaticas a resenas" connected={integrations.google} />
+              <IntegrationCard name="Claude AI (Anthropic)" icon="✦" description="Generacion de respuestas inteligentes" connected={integrations.ai} />
+              <IntegrationCard name="Twilio (WhatsApp + SMS)" icon="💬" description="Chatbot y mensajeria" connected={integrations.twilio} />
+              <IntegrationCard name="Resend (Email)" icon="📧" description="Secuencias de nurture y reportes" connected={integrations.resend} />
+              <IntegrationCard name="Stripe (Pagos)" icon="💳" description="Facturacion a clientes" connected={integrations.stripe} />
+              <IntegrationCard name="Supabase (Base de datos)" icon="⚡" description="Almacenamiento y autenticacion" connected={integrations.supabase} />
             </div>
           </>
         )}

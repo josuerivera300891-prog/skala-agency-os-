@@ -95,44 +95,96 @@ export default async function AgencyDashboard() {
         ))}
       </div>
 
+      {/* Quick Actions */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
+        <Link href="/clients/new" style={{
+          padding: '10px 20px', borderRadius: 10, border: 'none',
+          background: 'linear-gradient(135deg,#ff2ea8,#7c3aed)', color: '#fff',
+          fontSize: 13, fontWeight: 600, textDecoration: 'none',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          + Agregar cliente
+        </Link>
+        <Link href="/contacts" style={{
+          padding: '10px 20px', borderRadius: 10,
+          border: '1px solid rgba(255,255,255,0.1)', background: 'transparent',
+          color: '#9090b0', fontSize: 13, textDecoration: 'none',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          Ver contactos
+        </Link>
+        <Link href="/conversations" style={{
+          padding: '10px 20px', borderRadius: 10,
+          border: '1px solid rgba(255,255,255,0.1)', background: 'transparent',
+          color: '#9090b0', fontSize: 13, textDecoration: 'none',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          Ver conversaciones
+        </Link>
+      </div>
+
       {/* Client Grid */}
       <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: 16, fontWeight: 600, marginBottom: 16 }}>
         Clientes
       </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-        {(clients as Client[] ?? []).map((client) => (
-          <Link key={client.id} href={`/clients/${client.id}`} style={{ textDecoration: 'none' }}>
-            <div style={{
-              background: '#0f0f1a', border: '1px solid rgba(255,255,255,0.07)',
-              borderRadius: 12, padding: '20px 24px', cursor: 'pointer',
-              transition: 'border-color 0.15s',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 8,
-                  background: 'linear-gradient(135deg,#ff2ea8,#7c3aed)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 15, color: '#fff',
-                }}>
-                  {client.name[0]}
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#e8e8f0' }}>{client.name}</div>
-                  <div style={{ fontSize: 11, color: '#6b6b8a', textTransform: 'capitalize' }}>{client.vertical}</div>
-                </div>
-                <div style={{
-                  marginLeft: 'auto', width: 8, height: 8, borderRadius: '50%',
-                  background: client.active ? '#10b981' : '#6b6b8a',
-                }} />
-              </div>
-              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: '#6b6b8a' }}>
-                {client.gmb_location_id && <span>✦ GMB conectado</span>}
-                {client.config.twilio_wa_number && <span>✦ WhatsApp</span>}
-              </div>
-            </div>
+
+      {(clients as Client[] ?? []).length === 0 ? (
+        <div style={{
+          background: '#0f0f1a', border: '1px dashed rgba(124,58,237,0.4)',
+          borderRadius: 12, padding: '48px 24px', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>&#10024;</div>
+          <h3 style={{ fontFamily: 'Syne, sans-serif', fontSize: 18, fontWeight: 700, color: '#e8e8f0', marginBottom: 8 }}>
+            Agrega tu primer cliente para empezar
+          </h3>
+          <p style={{ fontSize: 13, color: '#6b6b8a', marginBottom: 20, maxWidth: 380, marginLeft: 'auto', marginRight: 'auto' }}>
+            Registra un negocio y comienza a gestionar resenas, leads y automatizaciones desde Skala.
+          </p>
+          <Link href="/clients/new" style={{
+            padding: '12px 28px', borderRadius: 10, border: 'none',
+            background: 'linear-gradient(135deg,#ff2ea8,#7c3aed)', color: '#fff',
+            fontSize: 14, fontWeight: 600, textDecoration: 'none',
+            display: 'inline-block',
+          }}>
+            + Agregar cliente
           </Link>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+          {(clients as Client[]).map((client) => (
+            <Link key={client.id} href={`/clients/${client.id}`} style={{ textDecoration: 'none' }}>
+              <div style={{
+                background: '#0f0f1a', border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: 12, padding: '20px 24px', cursor: 'pointer',
+                transition: 'border-color 0.15s',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    background: 'linear-gradient(135deg,#ff2ea8,#7c3aed)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 15, color: '#fff',
+                  }}>
+                    {client.name[0]}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#e8e8f0' }}>{client.name}</div>
+                    <div style={{ fontSize: 11, color: '#6b6b8a', textTransform: 'capitalize' }}>{client.vertical}</div>
+                  </div>
+                  <div style={{
+                    marginLeft: 'auto', width: 8, height: 8, borderRadius: '50%',
+                    background: client.active ? '#10b981' : '#6b6b8a',
+                  }} />
+                </div>
+                <div style={{ display: 'flex', gap: 16, fontSize: 12, color: '#6b6b8a' }}>
+                  {client.gmb_location_id && <span>✦ GMB conectado</span>}
+                  {client.config.twilio_wa_number && <span>✦ WhatsApp</span>}
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
