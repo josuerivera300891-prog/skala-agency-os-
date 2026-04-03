@@ -1,11 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { chatCompletion } from '@/lib/ai/openrouter'
 import { logger } from '@/lib/logger'
-
-let _client: Anthropic | null = null
-function getClient(): Anthropic {
-  if (!_client) _client = new Anthropic()
-  return _client
-}
 
 interface ReviewReplyParams {
   reviewText: string
@@ -35,18 +29,15 @@ Genera una respuesta EMPÁTICA en español para esta reseña negativa de ${revie
 - Máximo 3 oraciones
 Solo devuelve el texto de la respuesta.`
 
-  const message = await getClient().messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 300,
+  const { text, tokensUsed } = await chatCompletion({
     messages: [{ role: 'user', content: prompt }],
+    maxTokens: 300,
   })
 
-  const text = message.content[0].type === 'text' ? message.content[0].text : ''
-
-  logger.info('[Claude] Respuesta de reseña generada', {
+  logger.info('[AI] Respuesta de reseña generada', {
     clientName,
     rating,
-    tokensUsed: message.usage.input_tokens + message.usage.output_tokens,
+    tokensUsed,
   })
 
   return text

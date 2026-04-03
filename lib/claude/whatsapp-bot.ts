@@ -1,12 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { chatCompletion } from '@/lib/ai/openrouter'
 import { logger } from '@/lib/logger'
 import type { WhatsAppReplyResult, ClientConfig } from '@/types'
-
-let _client: Anthropic | null = null
-function getClient(): Anthropic {
-  if (!_client) _client = new Anthropic()
-  return _client
-}
 
 interface WhatsAppBotParams {
   message:    string
@@ -35,25 +29,24 @@ Reglas:
 Responde SOLO con JSON válido (sin markdown, sin backticks):
 {"text":"respuesta aquí","intent":"appointment|inquiry|complaint|other","detectedService":"servicio si aplica o null"}`
 
-  const response = await getClient().messages.create({
-    model:      'claude-sonnet-4-6',
-    max_tokens: 400,
-    system:     systemPrompt,
-    messages:   [{ role: 'user', content: message }],
+  const { text: raw, tokensUsed } = await chatCompletion({
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: message },
+    ],
+    maxTokens: 400,
   })
 
-  const raw = response.content[0].type === 'text' ? response.content[0].text : '{}'
-
-  logger.info('[Claude WA Bot] Respuesta generada', {
+  logger.info('[AI WA Bot] Respuesta generada', {
     clientName,
-    tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+    tokensUsed,
   })
 
   try {
     const parsed = JSON.parse(raw) as WhatsAppReplyResult
     return parsed
   } catch {
-    logger.warn('[Claude WA Bot] JSON inválido, retornando texto crudo', { raw })
+    logger.warn('[AI WA Bot] JSON inválido, retornando texto crudo', { raw })
     return { text: raw, intent: 'other' }
   }
 }
