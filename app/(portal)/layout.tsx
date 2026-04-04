@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   LayoutDashboard, MessageSquare, Star, Users, Globe, Settings,
+  ArrowLeft,
   type LucideProps,
 } from 'lucide-react'
 
@@ -30,6 +31,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [clientName, setClientName] = useState<string | null>(null)
+  const [isAgencyUser, setIsAgencyUser] = useState(false)
 
   const clientId = getClientIdFromPath(pathname)
   const navItems = clientId ? buildNav(clientId) : []
@@ -37,6 +39,8 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!clientId) return
     const supabase = createClient()
+
+    // Fetch client name
     supabase
       .from('clients')
       .select('name')
@@ -45,6 +49,21 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
       .then(({ data }) => {
         if (data?.name) setClientName(data.name)
       })
+
+    // Check if user is agency owner/member (not a client-role user)
+    async function checkRole() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      if (profile?.role === 'owner' || profile?.role === 'member') {
+        setIsAgencyUser(true)
+      }
+    }
+    checkRole()
   }, [clientId])
 
   return (
@@ -77,6 +96,25 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
           transition: 'transform 0.2s ease',
         }}
       >
+        {/* Back to agency */}
+        {isAgencyUser && (
+          <Link
+            href="/dashboard"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '10px 16px',
+              fontSize: 11, color: '#7c3aed', textDecoration: 'none',
+              borderBottom: '1px solid rgba(255,255,255,0.07)',
+              transition: 'color 0.12s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#a78bfa' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#7c3aed' }}
+          >
+            <ArrowLeft size={13} />
+            Volver a la agencia
+          </Link>
+        )}
+
         {/* Header */}
         <div style={{ padding: '20px 16px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
           <div style={{
